@@ -1,12 +1,12 @@
 // Export all service classes
-export { VKApi } from './VKApi/index.js';
-export { LongPollCollector } from './LongPollCollector.js';
-export { EventProcessor } from './EventProcessor.js';
-export { UserManager } from './UserManager.js';
-export { ChatManager } from './ChatManager.js';
-export { MessageParser } from './MessageParser.js';
-export { ErrorHandler } from './ErrorHandler.js';
-export { Logger } from './Logger.js';
+export { VKApi } from './VKApi/index';
+export { LongPollCollector } from './LongPollCollector';
+export { EventProcessor } from './EventProcessor';
+export { UserManager } from './UserManager';
+export { ChatManager } from './ChatManager';
+export { MessageParser } from './MessageParser';
+export { ErrorHandler } from './ErrorHandler';
+export { Logger } from './Logger';
 
 // Re-export service interface contracts
 export type {
@@ -15,4 +15,4 @@ export type {
   TChatManager,
   TUserManager,
   TMessageParser,
-} from '../types/index.js';
+} from '../types';

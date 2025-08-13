@@ -1,5 +1,5 @@
 // Placeholder for ChatManager class - will be implemented in later tasks
-import type { TChatManager, TParsedMessage, TChat } from '../types/index.js';
+import type { TChatManager, TParsedMessage, TChat } from '../types';
 
 export class ChatManager implements TChatManager {
   async saveMessage(_chatId: number, _message: TParsedMessage): Promise<void> {

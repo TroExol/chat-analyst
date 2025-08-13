@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { VKApi } from './services/VKApi/index.js';
+import { VKApi } from './services/VKApi';
 
 config();
 

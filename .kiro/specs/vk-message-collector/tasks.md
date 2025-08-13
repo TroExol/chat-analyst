@@ -7,15 +7,15 @@
   - Set up proper module exports and index files
   - _Requirements: 5.1, 5.2, 5.5_
 
-- [ ] 2. Implement core data models and validation
-- [ ] 2.1 Create TypeScript interfaces and types
+- [x] 2. Implement core data models and validation
+- [x] 2.1 Create TypeScript interfaces and types
 
   - Implement TUser, TChat, TMessage, TAttachment interfaces
   - Create TLongPollServerConfig, TParsedMessage, TMessageFlags types
   - Add validation functions for data integrity checks
   - _Requirements: 5.1, 5.2, 5.3_
 
-- [ ] 2.2 Implement message flags parsing utilities
+- [x] 2.2 Implement message flags parsing utilities
 
   - Create MessageFlags parser for Long Poll event flags
   - Implement flag extraction logic (unread, outbox, chat, media, etc.)

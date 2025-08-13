@@ -8,7 +8,16 @@ export type {
   TCachedUser,
   TParsedMessage,
   TMessageFlags,
-} from '../types/index.js';
+} from '../types';
 
 // Export model validation functions
-export { validateUser, validateMessage, validateChat } from './validators.js';
+export {
+  validateUser,
+  validateMessage,
+  validateChat,
+  validateAttachment,
+  validateMessageFlags,
+  validateParsedMessage,
+  validateLongPollServerConfig,
+  validateStoredChatData,
+} from './validators';

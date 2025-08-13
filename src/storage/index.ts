@@ -1,7 +1,7 @@
 // Export storage related classes
-export { FileStorage } from './FileStorage.js';
-export { ChatFileManager } from './ChatFileManager.js';
-export { UserCacheManager } from './UserCacheManager.js';
+export { FileStorage } from './FileStorage';
+export { ChatFileManager } from './ChatFileManager';
+export { UserCacheManager } from './UserCacheManager';
 
 // Re-export storage related types
-export type { TStoredChatData, TCachedUser } from '../types/index.js';
+export type { TStoredChatData, TCachedUser } from '../types';

@@ -1,6 +1,6 @@
 import { MessagesGetLongPollHistoryParams, MessagesGetLongPollHistoryResponse, MessagesGetLongPollServerParams, MessagesGetLongPollServerResponse } from '@vkontakte/api-schema-typescript';
-import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse } from './types.js';
-import { getFormData } from '../../utils.js';
+import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse } from './types';
+import { getFormData } from '../../utils';
 
 export class VKApi {
   private readonly baseUrl: string = 'https://api.vk.com/method';

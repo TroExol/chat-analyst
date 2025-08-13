@@ -1,5 +1,5 @@
 // Placeholder for EventProcessor class - will be implemented in later tasks
-import type { TEventProcessor, TLongPollEvent } from '../types/index.js';
+import type { TEventProcessor, TLongPollEvent } from '../types';
 
 export class EventProcessor implements TEventProcessor {
   async processEvent(_event: TLongPollEvent): Promise<void> {

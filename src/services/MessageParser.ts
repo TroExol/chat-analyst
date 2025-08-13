@@ -1,5 +1,5 @@
 // Placeholder for MessageParser class - will be implemented in later tasks
-import type { TMessageParser, TLongPollEvent, TParsedMessage, TAttachment } from '../types/index.js';
+import type { TMessageParser, TLongPollEvent, TParsedMessage, TAttachment } from '../types';
 
 export class MessageParser implements TMessageParser {
   parseMessageEvent(_event: TLongPollEvent): TParsedMessage {

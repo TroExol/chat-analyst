@@ -1,5 +1,5 @@
 // Placeholder for LongPollCollector class - will be implemented in later tasks
-import type { TLongPollCollector, TLongPollEvent } from '../types/index.js';
+import type { TLongPollCollector, TLongPollEvent } from '../types';
 
 export class LongPollCollector implements TLongPollCollector {
   async start(): Promise<void> {

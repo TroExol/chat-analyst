@@ -1,5 +1,5 @@
 // Placeholder for UserManager class - will be implemented in later tasks
-import type { TUserManager, TUser } from '../types/index.js';
+import type { TUserManager, TUser } from '../types';
 
 export class UserManager implements TUserManager {
   async getUserInfo(_userId: number): Promise<TUser> {
