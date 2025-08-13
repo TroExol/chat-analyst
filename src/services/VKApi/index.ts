@@ -1,6 +1,6 @@
 import { MessagesGetLongPollHistoryParams, MessagesGetLongPollHistoryResponse, MessagesGetLongPollServerParams, MessagesGetLongPollServerResponse } from '@vkontakte/api-schema-typescript';
-import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse } from './types';
-import { getFormData } from '../../utils';
+import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse } from './types.js';
+import { getFormData } from '../../utils.js';
 
 export class VKApi {
   private readonly baseUrl: string = 'https://api.vk.com/method';
@@ -21,19 +21,19 @@ export class VKApi {
     );
   };
 
-  // public getLongPollHistory = async (ts: number, pts: number) => {
-  //   const params: TApiWithAccessTokenParams<MessagesGetLongPollHistoryParams> = {
-  //     access_token: this.token,
-  //     v: '5.199',
-  //     ts,
-  //     pts,
-  //   };
-  //   return await this.fetchWithRetry<MessagesGetLongPollHistoryParams, MessagesGetLongPollHistoryResponse>(
-  //     `${this.baseUrl}/messages.getLongPollHistory`,
-  //     'POST',
-  //     params,
-  //   );
-  // };
+  public getLongPollHistory = async (ts: number, pts: number): Promise<MessagesGetLongPollHistoryResponse> => {
+    const params: TApiWithAccessTokenParams<MessagesGetLongPollHistoryParams> = {
+      access_token: this.token,
+      v: '5.199',
+      ts,
+      pts,
+    };
+    return await this.fetchWithRetry<MessagesGetLongPollHistoryParams, MessagesGetLongPollHistoryResponse>(
+      `${this.baseUrl}/messages.getLongPollHistory`,
+      'POST',
+      params,
+    );
+  };
 
   public refreshAccessToken = async () => {
     const data = await fetch('https://login.vk.com/?act=web_token', {

@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { VKApi } from './services/VKApi';
+import { VKApi } from './services/VKApi/index.js';
 
 config();
 
@@ -33,15 +33,8 @@ class ChatAnalyzer {
   }
 
   private async processData(): Promise<void> {
-    // Основная логика парсинга будет здесь
     console.log('📊 Начинаем обработку данных...');
 
-    // Заглушка для демонстрации
-    // setInterval(() => {
-    //   if (this.isRunning) {
-    //     console.log(`⏰ ${new Date().toISOString()} - Обработка данных...`);
-    //   }
-    // }, 5000);
     const vkApi = new VKApi();
     const data = await vkApi.getLongPollServerForChat();
     console.log(data);
