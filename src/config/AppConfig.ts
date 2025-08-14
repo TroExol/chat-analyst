@@ -103,6 +103,7 @@ export const DEFAULT_APP_CONFIG: TAppConfig = {
     maxMemoryCacheSize: parseInt(process.env.CHAT_CACHE_SIZE || '100'),
     autoSaveInterval: parseInt(process.env.AUTO_SAVE_INTERVAL || '30000'),
     enableBackups: process.env.ENABLE_FILE_BACKUP !== 'false',
+    membersUpdateInterval: parseInt(process.env.MEMBERS_UPDATE_INTERVAL || '1200000'), // 20 minutes
   },
 
   app: {

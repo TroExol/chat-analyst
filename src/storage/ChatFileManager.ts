@@ -10,6 +10,7 @@ export interface TChatFileManagerConfig {
   maxMemoryCacheSize: number; // Maximum number of chats to keep in memory cache
   autoSaveInterval: number; // Auto-save interval in milliseconds
   enableBackups: boolean; // Whether to create backups before overwriting files
+  membersUpdateInterval: number; // Interval for updating chat members in milliseconds
 }
 
 /**
@@ -19,6 +20,7 @@ export const DEFAULT_CHAT_MANAGER_CONFIG: TChatFileManagerConfig = {
   maxMemoryCacheSize: 100, // Keep 100 chats in memory
   autoSaveInterval: 60 * 1000, // Save every minute
   enableBackups: true,
+  membersUpdateInterval: 20 * 60 * 1000, // Update members every 20 minutes
 };
 
 /**
@@ -35,6 +37,7 @@ export class ChatFileManager implements TChatManager {
   private chatCache = new Map<number, TChat>();
   private chatFilePaths = new Map<number, string>(); // chatId -> filePath mapping
   private autoSaveTimer?: ReturnType<typeof setInterval>;
+  private membersUpdateTimer?: ReturnType<typeof setInterval>;
   private isInitialized = false;
 
   constructor(
@@ -70,6 +73,11 @@ export class ChatFileManager implements TChatManager {
       // Start auto-save timer if configured
       if (this.config.autoSaveInterval > 0) {
         this.startAutoSave();
+      }
+
+      // Start members update timer if VK API is available and configured
+      if (this.vkApi && this.config.membersUpdateInterval > 0) {
+        this.startMembersUpdate();
       }
 
       this.isInitialized = true;
@@ -261,6 +269,12 @@ export class ChatFileManager implements TChatManager {
     if (this.autoSaveTimer) {
       clearInterval(this.autoSaveTimer);
       this.autoSaveTimer = undefined;
+    }
+
+    // Stop members update timer
+    if (this.membersUpdateTimer) {
+      clearInterval(this.membersUpdateTimer);
+      this.membersUpdateTimer = undefined;
     }
 
     // Final save of all cached chats
@@ -514,5 +528,100 @@ export class ChatFileManager implements TChatManager {
     }, this.config.autoSaveInterval);
 
     console.log(`ChatFileManager: Auto-save started (interval: ${this.config.autoSaveInterval}ms)`);
+  }
+
+  private startMembersUpdate(): void {
+    this.membersUpdateTimer = setInterval(() => {
+      this.updateAllChatMembers().catch(error => {
+        console.error('ChatFileManager: Members update failed:', error);
+      });
+    }, this.config.membersUpdateInterval);
+
+    console.log(`ChatFileManager: Members update started (interval: ${this.config.membersUpdateInterval}ms)`);
+  }
+
+  private async updateAllChatMembers(): Promise<void> {
+    if (!this.vkApi) {
+      console.warn('ChatFileManager: Cannot update chat members - VK API not available');
+      return;
+    }
+
+    const chatIds = Array.from(this.chatCache.keys());
+    console.log(`ChatFileManager: Starting periodic update of ${chatIds.length} chats`);
+
+    let updatedChats = 0;
+    let newMembersFound = 0;
+
+    for (const chatId of chatIds) {
+      try {
+        const newMembers = await this.updateChatMembers(chatId);
+        if (newMembers > 0) {
+          updatedChats++;
+          newMembersFound += newMembers;
+        }
+      } catch (error) {
+        console.warn(`ChatFileManager: Failed to update members for chat ${chatId}:`, error);
+      }
+    }
+
+    console.log(`ChatFileManager: Members update completed - ${updatedChats} chats updated, ${newMembersFound} new members found`);
+  }
+
+  private async updateChatMembers(chatId: number): Promise<number> {
+    if (!this.vkApi) {
+      return 0;
+    }
+
+    const chat = this.chatCache.get(chatId);
+    if (!chat) {
+      return 0;
+    }
+
+    try {
+      // Get current members from VK API
+      const membersResponse = await this.vkApi.getConversationMembers(chatId);
+
+      if (!membersResponse?.profiles?.length) {
+        return 0;
+      }
+
+      const existingUserIds = new Set(chat.users.map(user => user.id));
+      let newMembersCount = 0;
+
+      // Process all profiles from the API response
+      for (const profile of membersResponse.profiles) {
+        if (profile.id && !existingUserIds.has(profile.id)) {
+          // New member found!
+          const user = {
+            id: profile.id,
+            name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+            lastActivity: profile.last_seen?.time ? new Date(profile.last_seen.time * 1000) : new Date(),
+          };
+
+          // Cache the user for future requests
+          this.userManager.cacheUser(user);
+
+          // Add to chat users list
+          chat.users.push(user);
+          newMembersCount++;
+
+          console.log(`ChatFileManager: New member added to chat ${chatId}: ${user.name} (${user.id})`);
+        }
+      }
+
+      // Update chat metadata if we found new members
+      if (newMembersCount > 0) {
+        chat.updatedAt = new Date();
+        this.chatCache.set(chatId, chat);
+
+        // Save updated chat to file
+        await this.saveChatToFile(chatId, chat);
+      }
+
+      return newMembersCount;
+    } catch (error) {
+      console.warn(`ChatFileManager: Failed to fetch members for chat ${chatId}:`, error);
+      return 0;
+    }
   }
 }
