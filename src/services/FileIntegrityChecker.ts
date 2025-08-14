@@ -2,8 +2,10 @@ import { promises as fs } from 'fs';
 import { join, basename } from 'path';
 import { createHash } from 'crypto';
 import { Logger } from './Logger';
-import { DataValidator, type TValidationResult } from './DataValidator';
+import { DataValidator } from './DataValidator';
 import type { FileStorage } from '../storage/FileStorage';
+import type { ChatFileManager } from '../storage/ChatFileManager';
+import type { UserCacheManager } from '../storage/UserCacheManager';
 
 /**
  * Configuration for file integrity checking
@@ -53,6 +55,10 @@ export class FileIntegrityChecker {
   private config: TFileIntegrityConfig;
   private checksumCache = new Map<string, string>();
 
+  // Optional cache managers for recovery
+  private chatFileManager?: ChatFileManager;
+  private userCacheManager?: UserCacheManager;
+
   constructor(
     logger: Logger,
     validator: DataValidator,
@@ -67,6 +73,19 @@ export class FileIntegrityChecker {
     this.logger.info('FileIntegrityChecker', 'Initialized', {
       checksumAlgorithm: this.config.checksumAlgorithm,
       enableBackupCreation: this.config.enableBackupCreation,
+    });
+  }
+
+  /**
+   * Set cache managers for recovery operations
+   */
+  setCacheManagers(chatFileManager?: ChatFileManager, userCacheManager?: UserCacheManager): void {
+    this.chatFileManager = chatFileManager;
+    this.userCacheManager = userCacheManager;
+
+    this.logger.debug('FileIntegrityChecker', 'Cache managers set for recovery', {
+      hasChatManager: !!chatFileManager,
+      hasUserManager: !!userCacheManager,
     });
   }
 
@@ -498,10 +517,230 @@ export class FileIntegrityChecker {
    * Attempt recovery from in-memory cache
    */
   private async attemptCacheRecovery(filePath: string): Promise<boolean> {
-    // This would need to be implemented based on the specific cache system
-    // For now, return false as cache recovery requires integration with ChatFileManager
-    this.logger.debug('FileIntegrityChecker', 'Cache recovery not yet implemented');
-    return false;
+    try {
+      this.logger.info('FileIntegrityChecker', `Attempting cache recovery for ${filePath}`);
+
+      // Determine file type and extract ID
+      const fileInfo = this.parseFileInfo(filePath);
+      if (!fileInfo) {
+        this.logger.warn('FileIntegrityChecker', `Cannot parse file info for cache recovery: ${filePath}`);
+        return false;
+      }
+
+      // Attempt recovery based on file type
+      switch (fileInfo.type) {
+      case 'chat':
+        return await this.recoverChatFromCache(filePath, fileInfo.id);
+      case 'user':
+        return await this.recoverUserFromCache(filePath, fileInfo.id);
+      default:
+        this.logger.warn('FileIntegrityChecker', `Unknown file type for cache recovery: ${fileInfo.type}`);
+        return false;
+      }
+
+    } catch (error) {
+      this.logger.error('FileIntegrityChecker', 'Cache recovery failed', {
+        filePath,
+        error: (error as Error).message,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Recover chat file from ChatFileManager cache
+   */
+  private async recoverChatFromCache(filePath: string, chatId: number): Promise<boolean> {
+    if (!this.chatFileManager) {
+      this.logger.warn('FileIntegrityChecker', 'ChatFileManager not available for cache recovery');
+      return false;
+    }
+
+    try {
+      // Get chat data from cache
+      const cachedChatData = await this.chatFileManager.getChatData(chatId);
+      if (!cachedChatData) {
+        this.logger.warn('FileIntegrityChecker', `No cached data found for chat ${chatId}`);
+        return false;
+      }
+
+      // Validate cached data
+      const validationResult = this.validator.validateChat(cachedChatData);
+      if (!validationResult.isValid) {
+        this.logger.warn('FileIntegrityChecker', `Cached data for chat ${chatId} is invalid`, {
+          errors: validationResult.errors,
+        });
+        return false;
+      }
+
+      // Create backup of corrupted file
+      const backupPath = `${filePath}.corrupted.${Date.now()}`;
+      try {
+        await fs.copyFile(filePath, backupPath);
+        this.logger.debug('FileIntegrityChecker', `Created backup of corrupted file: ${backupPath}`);
+      } catch (error) {
+        this.logger.warn('FileIntegrityChecker', 'Could not backup corrupted file', {
+          error: (error as Error).message,
+        });
+      }
+
+      // Convert chat data to storable format
+      const storableData = this.convertToStorableFormat(cachedChatData, 'chat');
+
+      // Write recovered data to file
+      await fs.writeFile(filePath, JSON.stringify(storableData, null, 2), 'utf8');
+
+      // Verify the recovery
+      const verificationResult = await this.checkSingleFile(filePath);
+      if (verificationResult.isValid && !verificationResult.isCorrupted) {
+        this.logger.info('FileIntegrityChecker', `Successfully recovered chat ${chatId} from cache`);
+        return true;
+      } else {
+        this.logger.error('FileIntegrityChecker', `Cache recovery verification failed for chat ${chatId}`, {
+          issues: verificationResult.issues,
+        });
+        return false;
+      }
+
+    } catch (error) {
+      this.logger.error('FileIntegrityChecker', `Chat cache recovery failed for ${chatId}`, {
+        error: (error as Error).message,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Recover user file from UserCacheManager cache
+   */
+  private async recoverUserFromCache(filePath: string, userId: number): Promise<boolean> {
+    if (!this.userCacheManager) {
+      this.logger.warn('FileIntegrityChecker', 'UserCacheManager not available for cache recovery');
+      return false;
+    }
+
+    try {
+      // Get user data from cache - UserCacheManager doesn't have direct user access
+      // We would need to load the entire cache and extract the user
+      const userCache = await this.userCacheManager.loadCache();
+      const cachedUserData = userCache.get(userId);
+      if (!cachedUserData) {
+        this.logger.warn('FileIntegrityChecker', `No cached data found for user ${userId}`);
+        return false;
+      }
+
+      // Validate cached data
+      const validationResult = this.validator.validateUser(cachedUserData);
+      if (!validationResult.isValid) {
+        this.logger.warn('FileIntegrityChecker', `Cached data for user ${userId} is invalid`, {
+          errors: validationResult.errors,
+        });
+        return false;
+      }
+
+      // Create backup of corrupted file
+      const backupPath = `${filePath}.corrupted.${Date.now()}`;
+      try {
+        await fs.copyFile(filePath, backupPath);
+        this.logger.debug('FileIntegrityChecker', `Created backup of corrupted file: ${backupPath}`);
+      } catch (error) {
+        this.logger.warn('FileIntegrityChecker', 'Could not backup corrupted file', {
+          error: (error as Error).message,
+        });
+      }
+
+      // Convert user data to storable format
+      const storableData = this.convertToStorableFormat(cachedUserData, 'user');
+
+      // Write recovered data to file
+      await fs.writeFile(filePath, JSON.stringify(storableData, null, 2), 'utf8');
+
+      // Verify the recovery
+      const verificationResult = await this.checkSingleFile(filePath);
+      if (verificationResult.isValid && !verificationResult.isCorrupted) {
+        this.logger.info('FileIntegrityChecker', `Successfully recovered user ${userId} from cache`);
+        return true;
+      } else {
+        this.logger.error('FileIntegrityChecker', `Cache recovery verification failed for user ${userId}`, {
+          issues: verificationResult.issues,
+        });
+        return false;
+      }
+
+    } catch (error) {
+      this.logger.error('FileIntegrityChecker', `User cache recovery failed for ${userId}`, {
+        error: (error as Error).message,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Parse file information from file path
+   */
+  private parseFileInfo(filePath: string): { type: 'chat' | 'user'; id: number } | null {
+    const fileName = basename(filePath, '.json');
+
+    // Parse chat file: chat-{id}-{name}.json
+    const chatMatch = fileName.match(/^chat-(\d+)-/);
+    if (chatMatch) {
+      return {
+        type: 'chat',
+        id: parseInt(chatMatch[1], 10),
+      };
+    }
+
+    // Parse user file: user-{id}.json or users.json with ID
+    const userMatch = fileName.match(/^user-(\d+)$/);
+    if (userMatch) {
+      return {
+        type: 'user',
+        id: parseInt(userMatch[1], 10),
+      };
+    }
+
+    // Try to extract ID from users cache file
+    if (fileName === 'users' || fileName.includes('cache')) {
+      // Would need to be determined from file content or context
+      return null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Convert cached data to storable format
+   */
+  private convertToStorableFormat(data: any, type: 'chat' | 'user'): any {
+    const now = new Date();
+
+    if (type === 'chat') {
+      // Convert to TStoredChatData format
+      return {
+        ...data,
+        version: '1.0',
+        metadata: {
+          fileCreated: now,
+          lastMessageId: data.messages && data.messages.length > 0
+            ? Math.max(...data.messages.map((m: any) => m.id))
+            : 0,
+          messageCount: data.messages?.length || 0,
+          participantCount: data.users?.length || 0,
+        },
+        // Ensure dates are properly serialized
+        createdAt: data.createdAt instanceof Date ? data.createdAt : new Date(data.createdAt),
+        updatedAt: now,
+      };
+    } else if (type === 'user') {
+      // Convert to cached user format if needed
+      return {
+        ...data,
+        cachedAt: now,
+        ttl: 3600000, // 1 hour default TTL
+      };
+    }
+
+    return data;
   }
 
   /**

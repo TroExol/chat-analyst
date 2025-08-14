@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { ConfigManager, type TAppConfig } from './config';
+import { ConfigManager, type TAppConfig, EnvironmentConfigManager } from './config';
 import { VKApi } from './services/VKApi';
 import { Logger } from './services/Logger';
 import { ErrorHandler } from './services/ErrorHandler';
@@ -9,6 +9,8 @@ import { MessageParser } from './services/MessageParser';
 import { UserManager } from './services/UserManager';
 import { DataValidator } from './services/DataValidator';
 import { FileIntegrityChecker } from './services/FileIntegrityChecker';
+import { HealthCheckService } from './services/HealthCheckService';
+import { SystemMonitor } from './services/SystemMonitor';
 import { FileStorage } from './storage/FileStorage';
 import { ChatFileManager } from './storage/ChatFileManager';
 import { UserCacheManager } from './storage/UserCacheManager';
@@ -24,6 +26,7 @@ class ChatAnalyzer {
   private isRunning: boolean = false;
   private isShuttingDown: boolean = false;
   private config: TAppConfig;
+  private envConfig!: EnvironmentConfigManager;
 
   // Core services
   private logger: Logger;
@@ -44,6 +47,10 @@ class ChatAnalyzer {
   // Data validation and integrity
   private dataValidator!: DataValidator;
   private fileIntegrityChecker!: FileIntegrityChecker;
+
+  // Production monitoring and health checks
+  private healthCheckService!: HealthCheckService;
+  private systemMonitor!: SystemMonitor;
 
   // Statistics and monitoring
   private startTime: Date | null = null;
@@ -121,10 +128,32 @@ class ChatAnalyzer {
         this.dataValidator,
         this.fileStorage,
         {
-          enableChecksumValidation: true,
-          enableBackupCreation: true,
+          enableChecksumValidation: this.envConfig.isFeatureEnabled('enableFileIntegrityChecks'),
+          enableBackupCreation: this.envConfig.isFeatureEnabled('enableBackupCreation'),
         },
       );
+
+      // Set cache managers for recovery after they're initialized
+      this.fileIntegrityChecker.setCacheManagers(this.chatFileManager, this.userCacheManager);
+
+      // Production monitoring and health checks
+      if (this.envConfig.isFeatureEnabled('enableHealthChecks')) {
+        this.healthCheckService = new HealthCheckService(
+          this.logger,
+          this.envConfig,
+        );
+
+        // Register component health checks
+        this.registerComponentHealthChecks();
+      }
+
+      if (this.envConfig.isFeatureEnabled('enablePerformanceMetrics')) {
+        this.systemMonitor = new SystemMonitor(
+          this.logger,
+          this.envConfig,
+          this.healthCheckService,
+        );
+      }
 
       this.eventProcessor = new EventProcessor(
         this.logger,
@@ -177,6 +206,9 @@ class ChatAnalyzer {
 
       // Perform startup integrity checks
       await this.performStartupChecks();
+
+      // Start production services
+      await this.startProductionServices();
 
       // Start core components
       await this.startComponents();
@@ -270,6 +302,33 @@ class ChatAnalyzer {
         error: (error as Error).message,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Start production-ready services (health checks, monitoring)
+   */
+  private async startProductionServices(): Promise<void> {
+    try {
+      // Start health check service
+      if (this.healthCheckService) {
+        await this.healthCheckService.start();
+        this.logger.info('ChatAnalyzer', 'Health check service started', {
+          port: this.envConfig.getMonitoringConfig().healthCheckPort,
+        });
+      }
+
+      // Start system monitoring
+      if (this.systemMonitor) {
+        await this.systemMonitor.start();
+        this.logger.info('ChatAnalyzer', 'System monitoring started');
+      }
+
+    } catch (error) {
+      this.logger.error('ChatAnalyzer', 'Failed to start production services', {
+        error: (error as Error).message,
+      });
+      // Don't throw - continue with degraded monitoring
     }
   }
 
@@ -479,6 +538,185 @@ class ChatAnalyzer {
         messagesCollected: this.eventProcessor?.getStats().messagesSaved || 0,
       },
     };
+  }
+
+  /**
+   * Register health checks for all components
+   */
+  private registerComponentHealthChecks(): void {
+    if (!this.healthCheckService) return;
+
+    // VK API health check
+    this.healthCheckService.registerHealthCheck('vk-api', async () => {
+      try {
+        // Simple API check (could call a lightweight method)
+        const isConnected = this.vkApi && this.longPollCollector.getConnectionState().connected;
+
+        return {
+          name: 'vk-api',
+          status: isConnected ? 'healthy' : 'unhealthy',
+          message: isConnected ? 'VK API connection healthy' : 'VK API connection failed',
+          lastCheck: new Date(),
+          metadata: {
+            connectionState: this.longPollCollector?.getConnectionState(),
+          },
+        };
+      } catch (error) {
+        return {
+          name: 'vk-api',
+          status: 'unhealthy',
+          message: `VK API check failed: ${(error as Error).message}`,
+          lastCheck: new Date(),
+        };
+      }
+    });
+
+    // Long Poll Collector health check
+    this.healthCheckService.registerHealthCheck('longpoll-collector', async () => {
+      try {
+        const connectionState = this.longPollCollector.getConnectionState();
+        const stats = this.longPollCollector.getStats();
+
+        let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+        let message = 'Long Poll collector healthy';
+
+        if (!connectionState.connected) {
+          status = 'unhealthy';
+          message = 'Long Poll collector disconnected';
+        } else if (stats.reconnectionAttempts > 5) {
+          status = 'degraded';
+          message = `Frequent reconnections: ${stats.reconnectionAttempts}`;
+        }
+
+        return {
+          name: 'longpoll-collector',
+          status,
+          message,
+          lastCheck: new Date(),
+          metadata: {
+            connected: connectionState.connected,
+            reconnectionAttempts: stats.reconnectionAttempts,
+            totalEventsReceived: stats.totalEventsReceived,
+            lastEventTime: stats.lastEventTime,
+            uptime: stats.uptime,
+          },
+        };
+      } catch (error) {
+        return {
+          name: 'longpoll-collector',
+          status: 'unhealthy',
+          message: `Long Poll check failed: ${(error as Error).message}`,
+          lastCheck: new Date(),
+        };
+      }
+    });
+
+    // Event Processor health check
+    this.healthCheckService.registerHealthCheck('event-processor', async () => {
+      try {
+        const stats = this.eventProcessor.getStats();
+        const performance = this.eventProcessor.getPerformanceReport();
+
+        let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+        let message = 'Event processor healthy';
+
+        if (performance.errors.rate > 10) {
+          status = 'unhealthy';
+          message = `High error rate: ${performance.errors.rate.toFixed(1)}%`;
+        } else if (performance.errors.rate > 5) {
+          status = 'degraded';
+          message = `Elevated error rate: ${performance.errors.rate.toFixed(1)}%`;
+        } else if (performance.processing.averageTime > 1000) {
+          status = 'degraded';
+          message = `Slow processing: ${performance.processing.averageTime.toFixed(1)}ms avg`;
+        }
+
+        return {
+          name: 'event-processor',
+          status,
+          message,
+          lastCheck: new Date(),
+          metadata: {
+            eventsProcessed: stats.eventsProcessed,
+            messagesSaved: stats.messagesSaved,
+            errorRate: performance.errors.rate,
+            averageProcessingTime: performance.processing.averageTime,
+            uniqueChats: stats.uniqueChatsCount,
+          },
+        };
+      } catch (error) {
+        return {
+          name: 'event-processor',
+          status: 'unhealthy',
+          message: `Event processor check failed: ${(error as Error).message}`,
+          lastCheck: new Date(),
+        };
+      }
+    });
+
+    // Storage health check
+    this.healthCheckService.registerHealthCheck('storage', async () => {
+      try {
+        const chatStats = this.chatFileManager.getCacheStats();
+
+        let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+        let message = 'Storage systems healthy';
+
+        // Simple storage health check based on cache status
+        if (chatStats.cachedChats > chatStats.maxCacheSize * 0.9) {
+          status = 'degraded';
+          message = `Cache nearing capacity: ${chatStats.cachedChats}/${chatStats.maxCacheSize}`;
+        }
+
+        return {
+          name: 'storage',
+          status,
+          message,
+          lastCheck: new Date(),
+          metadata: {
+            cachedChats: chatStats.cachedChats,
+            maxCacheSize: chatStats.maxCacheSize,
+            cacheUtilization: `${((chatStats.cachedChats / chatStats.maxCacheSize) * 100).toFixed(1)}%`,
+          },
+        };
+      } catch (error) {
+        return {
+          name: 'storage',
+          status: 'unhealthy',
+          message: `Storage check failed: ${(error as Error).message}`,
+          lastCheck: new Date(),
+        };
+      }
+    });
+
+    this.logger.info('ChatAnalyzer', 'Component health checks registered', {
+      totalChecks: 4,
+      components: ['vk-api', 'longpoll-collector', 'event-processor', 'storage'],
+    });
+  }
+
+  /**
+   * Stop production services
+   */
+  private async stopProductionServices(): Promise<void> {
+    try {
+      // Stop system monitoring
+      if (this.systemMonitor) {
+        await this.systemMonitor.stop();
+      }
+
+      // Stop health check service
+      if (this.healthCheckService) {
+        await this.healthCheckService.stop();
+      }
+
+      this.logger.info('ChatAnalyzer', 'Production services stopped');
+
+    } catch (error) {
+      this.logger.error('ChatAnalyzer', 'Error stopping production services', {
+        error: (error as Error).message,
+      });
+    }
   }
 }
 
