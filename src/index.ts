@@ -95,7 +95,7 @@ class ChatAnalyzer {
       // Storage layer
       this.fileStorage = new FileStorage(this.config.fileStorage);
       this.userCacheManager = new UserCacheManager({
-        cacheFilePath: this.fileStorage.generateCacheFilePath('users'),
+        cacheFilePath: this.fileStorage.generateCacheFilePath('users.json'),
       });
 
       // Initialize userManager before chatFileManager
@@ -103,7 +103,7 @@ class ChatAnalyzer {
         this.vkApi,
         {},
         {
-          cacheFilePath: this.fileStorage.generateCacheFilePath('users'),
+          cacheFilePath: this.fileStorage.generateCacheFilePath('users.json'),
         },
       );
 

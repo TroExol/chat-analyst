@@ -7,26 +7,21 @@ import { UserCacheManager, type TUserCacheManagerConfig } from '../storage/UserC
  * Configuration for UserManager cache
  */
 export interface TUserManagerConfig {
-  cacheTimeToLive: number; // TTL in milliseconds
+  cacheTimeToLive: number; // TTL in milliseconds (unused - cache never expires)
   batchSize: number; // Maximum users to fetch in one API call
-  cleanupInterval: number; // Cache cleanup interval in milliseconds
-  maxCacheSize: number; // Maximum number of users to keep in cache
 }
 
 /**
  * Default configuration for UserManager
  */
 export const DEFAULT_USER_MANAGER_CONFIG: TUserManagerConfig = {
-  cacheTimeToLive: 30 * 60 * 1000, // 30 minutes
+  cacheTimeToLive: 0, // Unused - cache never expires
   batchSize: 100, // VK API limit for users.get
-  cleanupInterval: 5 * 60 * 1000, // 5 minutes
-  maxCacheSize: 10000, // 10k users
 };
 
 export class UserManager implements TUserManager {
   private userCache = new Map<number, TCachedUser>();
   private pendingRequests = new Map<number, Promise<TUser>>();
-  private cleanupTimer?: ReturnType<typeof setInterval>;
   private vkApi: VKApi;
   private config: TUserManagerConfig;
   private cacheManager: UserCacheManager;
@@ -57,24 +52,17 @@ export class UserManager implements TUserManager {
       // Load cache from persistent storage
       const persistedCache = await this.cacheManager.loadCache();
 
-      // Warm up in-memory cache
+      // Warm up in-memory cache (never expire - load all cached users!)
       let validEntries = 0;
-      let expiredEntries = 0;
 
       for (const [userId, cachedUser] of persistedCache) {
-        if (this.isCacheExpired(cachedUser)) {
-          expiredEntries++;
-          continue;
-        }
-
         this.userCache.set(userId, cachedUser);
         validEntries++;
       }
 
-      console.log(`UserManager: Cache warmed with ${validEntries} users, ${expiredEntries} expired entries skipped`);
+      console.log(`UserManager: Cache warmed with ${validEntries} users (cache never expires)`);
 
-      // Start cleanup timer and auto-save
-      this.startCleanupTimer();
+      // Start auto-save (but no cleanup timer - cache never expires!)
       this.cacheManager.startAutoSave(this.userCache);
 
       this.isInitialized = true;
@@ -91,9 +79,9 @@ export class UserManager implements TUserManager {
    * @returns Promise with user data
    */
   async getUserInfo(userId: number): Promise<TUser> {
-    // Check cache first
+    // Check cache first (cache never expires!)
     const cached = this.userCache.get(userId);
-    if (cached && !this.isCacheExpired(cached)) {
+    if (cached) {
       return {
         id: cached.id,
         name: cached.name,
@@ -129,10 +117,10 @@ export class UserManager implements TUserManager {
     const result = new Map<number, TUser>();
     const uncachedUserIds: number[] = [];
 
-    // Check cache for existing users
+    // Check cache for existing users (cache never expires!)
     for (const userId of userIds) {
       const cached = this.userCache.get(userId);
-      if (cached && !this.isCacheExpired(cached)) {
+      if (cached) {
         result.set(userId, {
           id: cached.id,
           name: cached.name,
@@ -158,13 +146,13 @@ export class UserManager implements TUserManager {
   }
 
   /**
-   * Clears all cached user data
+   * Cache is never cleared - users persist indefinitely
    */
   clearCache(): void {
-    this.userCache.clear();
+    // Only clear pending requests and stats, but keep user cache intact!
     this.pendingRequests.clear();
     this.cacheManager.clearStats();
-    console.log('UserManager: Cache cleared');
+    console.log('UserManager: Cache is persistent - only cleared pending requests and stats');
   }
 
   /**
@@ -223,23 +211,14 @@ export class UserManager implements TUserManager {
 
     this.userCache.set(user.id, cachedUser);
 
-    // Enforce cache size limit
-    if (this.userCache.size > this.config.maxCacheSize) {
-      this.evictOldestEntries();
-    }
+    // Cache grows indefinitely - no size limits!
   }
 
   /**
-   * Stops cache cleanup timer and saves final cache state
+   * Saves final cache state on destroy (no cleanup timer to stop)
    */
   async destroy(): Promise<void> {
     console.log('UserManager: Destroying...');
-
-    // Stop cleanup timer
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = undefined;
-    }
 
     // Stop auto-save
     this.cacheManager.stopAutoSave();
@@ -343,49 +322,7 @@ export class UserManager implements TUserManager {
     };
   }
 
-  private isCacheExpired(cachedUser: TCachedUser): boolean {
-    const now = new Date().getTime();
-    const cacheTime = cachedUser.cachedAt.getTime();
-    return (now - cacheTime) > cachedUser.ttl;
-  }
-
-  private startCleanupTimer(): void {
-    this.cleanupTimer = setInterval(() => {
-      this.cleanupExpiredEntries();
-    }, this.config.cleanupInterval);
-  }
-
-  private cleanupExpiredEntries(): void {
-    const expiredKeys: number[] = [];
-
-    for (const [userId, cachedUser] of this.userCache) {
-      if (this.isCacheExpired(cachedUser)) {
-        expiredKeys.push(userId);
-      }
-    }
-
-    for (const key of expiredKeys) {
-      this.userCache.delete(key);
-    }
-
-    if (expiredKeys.length > 0) {
-      console.log(`UserManager: Removed ${expiredKeys.length} expired cache entries`);
-    }
-  }
-
-  private evictOldestEntries(): void {
-    const entries = Array.from(this.userCache.entries());
-    // Sort by cache time, oldest first
-    entries.sort((a, b) => a[1].cachedAt.getTime() - b[1].cachedAt.getTime());
-
-    const entriesToRemove = entries.length - this.config.maxCacheSize + 1000; // Remove extra 1000 for buffer
-
-    for (let i = 0; i < entriesToRemove && i < entries.length; i++) {
-      this.userCache.delete(entries[i][0]);
-    }
-
-    console.log(`UserManager: Evicted ${entriesToRemove} oldest cache entries`);
-  }
+  // Cache cleanup methods removed - cache never expires!
 
   private calculateHitRate(): number {
     // Simple hit rate calculation - would need more sophisticated tracking in production

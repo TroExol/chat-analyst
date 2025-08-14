@@ -76,7 +76,6 @@ describe('UserManager', () => {
       const customConfig: Partial<TUserManagerConfig> = {
         cacheTimeToLive: 60000,
         batchSize: 50,
-        maxCacheSize: 5000,
       };
 
       const customCacheConfig: Partial<TUserCacheManagerConfig> = {
@@ -109,13 +108,13 @@ describe('UserManager', () => {
       expect(mockConsole.log).toHaveBeenCalledWith('UserManager: Initialization complete');
     });
 
-    it('should skip expired entries during cache warming', async () => {
+    it('should load all entries during cache warming - never skip expired', async () => {
       const cachedUsers = new Map<number, TCachedUser>();
-      const expiredDate = new Date(Date.now() - DEFAULT_USER_MANAGER_CONFIG.cacheTimeToLive - 1000);
+      const oldDate = new Date(Date.now() - 999999); // Very old date
 
       cachedUsers.set(123, {
         ...testUsers[0],
-        cachedAt: expiredDate,
+        cachedAt: oldDate,
         ttl: DEFAULT_USER_MANAGER_CONFIG.cacheTimeToLive,
       });
 
@@ -124,7 +123,7 @@ describe('UserManager', () => {
       await userManager.initialize();
 
       expect(mockConsole.log).toHaveBeenCalledWith(
-        expect.stringContaining('Cache warmed with 0 users, 1 expired entries skipped'),
+        expect.stringContaining('Cache warmed with 1 users (cache never expires)'),
       );
     });
 
@@ -333,59 +332,48 @@ describe('UserManager', () => {
       );
     });
 
-    it('should evict oldest entries when cache size limit is reached', () => {
-      const userManager = new UserManager(mockVkApi, { maxCacheSize: 2 });
+    it('should never evict entries - cache grows indefinitely', () => {
+      const userManager = new UserManager(mockVkApi, {});
 
-      // Add users to exceed cache limit
+      // Add many users - cache should grow without limits
       userManager.cacheUser(testUsers[0]);
       userManager.cacheUser(testUsers[1]);
-      userManager.cacheUser(testUsers[2]); // This should trigger eviction
+      userManager.cacheUser(testUsers[2]);
 
-      expect(mockConsole.log).toHaveBeenCalledWith(
-        expect.stringContaining('Evicted'),
-      );
+      const stats = userManager.getCacheStats();
+      expect(stats.size).toBe(3); // All users should remain cached
     });
 
-    it('should clear cache and pending requests', () => {
+    it('should keep cache but clear pending requests and stats', () => {
       userManager.cacheUser(testUsers[0]);
 
       userManager.clearCache();
 
       const stats = userManager.getCacheStats();
-      expect(stats.size).toBe(0);
-      expect(stats.pendingRequests).toBe(0);
+      expect(stats.size).toBe(1); // User cache remains intact
+      expect(stats.pendingRequests).toBe(0); // Only pending requests cleared
       expect(mockCacheManager.clearStats).toHaveBeenCalled();
     });
 
-    it('should cleanup expired entries periodically', async () => {
-      jest.useFakeTimers();
-
-      // Initialize with cache manager mock first
+    it('should never cleanup entries - cache persists indefinitely', async () => {
       const userManager = new UserManager(mockVkApi, {
         cacheTimeToLive: 1000,
-        cleanupInterval: 5000,
       });
 
       await userManager.initialize();
 
-      // Add expired user
-      const expiredUser = {
+      // Add "expired" user (but it will never be removed)
+      const oldUser = {
         ...testUsers[0],
         cachedAt: new Date(Date.now() - 2000),
         ttl: 1000,
       };
 
-      (userManager as any).userCache.set(123, expiredUser);
+      (userManager as any).userCache.set(123, oldUser);
 
-      // Clear previous console calls
-      mockConsole.log.mockClear();
-
-      // Fast forward time to trigger cleanup
-      jest.advanceTimersByTime(6000);
-
-      expect(mockConsole.log).toHaveBeenCalledWith(
-        expect.stringContaining('Removed 1 expired cache entries'),
-      );
+      // Simulate time passing - user should still be cached
+      const stats = userManager.getCacheStats();
+      expect(stats.size).toBe(1); // User remains in cache forever
     });
   });
 

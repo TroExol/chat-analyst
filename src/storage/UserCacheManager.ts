@@ -17,7 +17,7 @@ export interface TUserCacheManagerConfig {
  * Default configuration for UserCacheManager
  */
 export const DEFAULT_CACHE_CONFIG: TUserCacheManagerConfig = {
-  cacheFilePath: './data/cache/user-cache.json',
+  cacheFilePath: './cache/users.json',
   saveInterval: 60 * 1000, // 1 minute
   backupRetention: 5,
 };
