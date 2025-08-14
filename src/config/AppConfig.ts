@@ -75,6 +75,7 @@ export const DEFAULT_APP_CONFIG: TAppConfig = {
   eventProcessor: {
     enableMessageLogging: process.env.ENABLE_MESSAGE_LOGGING !== 'false',
     enableUserActivityTracking: process.env.ENABLE_USER_ACTIVITY_TRACKING !== 'false',
+    enableDataValidation: process.env.ENABLE_DATA_VALIDATION !== 'false',
     maxConcurrentProcessing: parseInt(process.env.MAX_CONCURRENT_PROCESSING || '10'),
     processingTimeout: parseInt(process.env.PROCESSING_TIMEOUT || '30000'),
   },

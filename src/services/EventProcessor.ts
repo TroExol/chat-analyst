@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { Logger } from './Logger';
 import { ErrorHandler } from './ErrorHandler';
+import { DataValidator } from './DataValidator';
 
 /**
  * Event type constants based on VK Long Poll API
@@ -36,6 +37,7 @@ export type EventHandler = (event: TLongPollEvent) => Promise<void>;
 export interface TEventProcessorConfig {
   enableMessageLogging: boolean;
   enableUserActivityTracking: boolean;
+  enableDataValidation: boolean;
   maxConcurrentProcessing: number;
   processingTimeout: number; // milliseconds
 }
@@ -46,6 +48,7 @@ export interface TEventProcessorConfig {
 export const DEFAULT_EVENT_PROCESSOR_CONFIG: TEventProcessorConfig = {
   enableMessageLogging: true,
   enableUserActivityTracking: true,
+  enableDataValidation: true,
   maxConcurrentProcessing: 10,
   processingTimeout: 30000, // 30 seconds
 };
@@ -60,19 +63,39 @@ export class EventProcessor implements TEventProcessor {
   private messageParser: TMessageParser;
   private userManager: TUserManager;
   private chatManager: TChatManager;
+  private dataValidator: DataValidator;
   private config: TEventProcessorConfig;
 
   // Event handlers registry
   private eventHandlers = new Map<number, EventHandler[]>();
 
-  // Statistics
+  // Statistics with performance metrics
   private stats = {
     eventsProcessed: 0,
     messagesSaved: 0,
     errorsEncountered: 0,
     lastProcessedTimestamp: null as Date | null,
     processingQueue: 0,
+
+    // Performance metrics
+    averageProcessingTime: 0,
+    totalProcessingTime: 0,
+    longestProcessingTime: 0,
+    shortestProcessingTime: Number.MAX_VALUE,
+
+    // Message-specific stats
+    messagesPerSecond: 0,
+    lastPerformanceCalculation: new Date(),
+
+    // Chat and user tracking
+    uniqueChatsProcessed: new Set<number>(),
+    uniqueUsersEncountered: new Set<number>(),
+    messageTypes: new Map<number, number>(), // eventType -> count
   };
+
+  // Performance tracking
+  private lastHundredMessages: number = 0;
+  private performanceBuffer: number[] = []; // Store last 100 processing times
 
   constructor(
     logger: Logger,
@@ -88,6 +111,12 @@ export class EventProcessor implements TEventProcessor {
     this.userManager = userManager;
     this.chatManager = chatManager;
     this.config = { ...DEFAULT_EVENT_PROCESSOR_CONFIG, ...config };
+
+    // Initialize data validator
+    this.dataValidator = new DataValidator(logger, {
+      strictMode: false, // Don't fail on warnings
+      enableMessageContentValidation: true,
+    });
 
     // Register default handlers
     this.setupDefaultHandlers();
@@ -170,10 +199,53 @@ export class EventProcessor implements TEventProcessor {
   }
 
   /**
-   * Get processing statistics
+   * Get processing statistics with computed metrics
    */
-  getStats(): typeof this.stats {
-    return { ...this.stats };
+  getStats() {
+    return {
+      eventsProcessed: this.stats.eventsProcessed,
+      messagesSaved: this.stats.messagesSaved,
+      errorsEncountered: this.stats.errorsEncountered,
+      lastProcessedTimestamp: this.stats.lastProcessedTimestamp,
+      processingQueue: this.stats.processingQueue,
+
+      // Performance metrics
+      averageProcessingTime: this.stats.averageProcessingTime,
+      longestProcessingTime: this.stats.longestProcessingTime,
+      shortestProcessingTime: this.stats.shortestProcessingTime === Number.MAX_VALUE ? 0 : this.stats.shortestProcessingTime,
+      messagesPerSecond: this.calculateMessagesPerSecond(),
+
+      // Unique counters
+      uniqueChatsCount: this.stats.uniqueChatsProcessed.size,
+      uniqueUsersCount: this.stats.uniqueUsersEncountered.size,
+
+      // Message type distribution
+      messageTypeDistribution: Object.fromEntries(this.stats.messageTypes),
+    };
+  }
+
+  /**
+   * Reset statistics (useful for testing and fresh starts)
+   */
+  resetStats(): void {
+    this.stats.eventsProcessed = 0;
+    this.stats.messagesSaved = 0;
+    this.stats.errorsEncountered = 0;
+    this.stats.lastProcessedTimestamp = null;
+    this.stats.processingQueue = 0;
+    this.stats.totalProcessingTime = 0;
+    this.stats.averageProcessingTime = 0;
+    this.stats.longestProcessingTime = 0;
+    this.stats.shortestProcessingTime = Number.MAX_VALUE;
+    this.stats.messagesPerSecond = 0;
+    this.stats.lastPerformanceCalculation = new Date();
+    this.stats.uniqueChatsProcessed.clear();
+    this.stats.uniqueUsersEncountered.clear();
+    this.stats.messageTypes.clear();
+    this.performanceBuffer = [];
+    this.lastHundredMessages = 0;
+
+    this.logger.info('EventProcessor', 'Statistics reset');
   }
 
   /**
@@ -181,6 +253,126 @@ export class EventProcessor implements TEventProcessor {
    */
   getRegisteredEventTypes(): number[] {
     return Array.from(this.eventHandlers.keys());
+  }
+
+  /**
+   * Update performance metrics with new processing time
+   */
+  private updatePerformanceMetrics(processingTime: number): void {
+    // Update basic metrics
+    this.stats.totalProcessingTime += processingTime;
+
+    if (processingTime > this.stats.longestProcessingTime) {
+      this.stats.longestProcessingTime = processingTime;
+    }
+
+    if (processingTime < this.stats.shortestProcessingTime) {
+      this.stats.shortestProcessingTime = processingTime;
+    }
+
+    // Maintain rolling average using performance buffer
+    this.performanceBuffer.push(processingTime);
+    if (this.performanceBuffer.length > 100) {
+      this.performanceBuffer.shift(); // Keep only last 100 measurements
+    }
+
+    // Calculate average from buffer
+    const sum = this.performanceBuffer.reduce((acc, time) => acc + time, 0);
+    this.stats.averageProcessingTime = sum / this.performanceBuffer.length;
+  }
+
+  /**
+   * Calculate messages per second based on recent activity
+   */
+  private calculateMessagesPerSecond(): number {
+    const now = new Date();
+    const timeDiff = now.getTime() - this.stats.lastPerformanceCalculation.getTime();
+
+    if (timeDiff < 1000) return this.stats.messagesPerSecond; // Don't recalculate too often
+
+    const messagesDiff = this.stats.messagesSaved - this.lastHundredMessages;
+    const seconds = timeDiff / 1000;
+
+    this.stats.messagesPerSecond = messagesDiff / seconds;
+    this.stats.lastPerformanceCalculation = now;
+
+    return this.stats.messagesPerSecond;
+  }
+
+  /**
+   * Check if we should report progress (every 100 messages)
+   */
+  private shouldReportProgress(): boolean {
+    const messagesSinceLastReport = this.stats.messagesSaved - this.lastHundredMessages;
+    return messagesSinceLastReport >= 100;
+  }
+
+  /**
+   * Report progress statistics every 100 messages
+   */
+  private reportProgressStats(): void {
+    const stats = this.getStats();
+
+    this.logger.info('EventProcessor', '📊 Processing Milestone - 100 messages processed', {
+      totalMessages: stats.messagesSaved,
+      totalEvents: stats.eventsProcessed,
+      uniqueChats: stats.uniqueChatsCount,
+      uniqueUsers: stats.uniqueUsersCount,
+      averageProcessingTime: `${stats.averageProcessingTime.toFixed(2)}ms`,
+      messagesPerSecond: stats.messagesPerSecond.toFixed(2),
+      longestProcessingTime: `${stats.longestProcessingTime}ms`,
+      shortestProcessingTime: `${stats.shortestProcessingTime}ms`,
+      messageTypeDistribution: stats.messageTypeDistribution,
+      errorsEncountered: stats.errorsEncountered,
+    });
+
+    // Update the baseline for next report
+    this.lastHundredMessages = this.stats.messagesSaved;
+  }
+
+  /**
+   * Get detailed performance report
+   */
+  getPerformanceReport(): {
+    processing: {
+      averageTime: number;
+      longestTime: number;
+      shortestTime: number;
+      messagesPerSecond: number;
+    };
+    volume: {
+      totalEvents: number;
+      totalMessages: number;
+      uniqueChats: number;
+      uniqueUsers: number;
+    };
+    distribution: Record<string, number>;
+    errors: {
+      total: number;
+      rate: number;
+    };
+    } {
+    const stats = this.getStats();
+
+    return {
+      processing: {
+        averageTime: stats.averageProcessingTime,
+        longestTime: stats.longestProcessingTime,
+        shortestTime: stats.shortestProcessingTime,
+        messagesPerSecond: stats.messagesPerSecond,
+      },
+      volume: {
+        totalEvents: stats.eventsProcessed,
+        totalMessages: stats.messagesSaved,
+        uniqueChats: stats.uniqueChatsCount,
+        uniqueUsers: stats.uniqueUsersCount,
+      },
+      distribution: stats.messageTypeDistribution,
+      errors: {
+        total: stats.errorsEncountered,
+        rate: stats.eventsProcessed > 0 ? (stats.errorsEncountered / stats.eventsProcessed) * 100 : 0,
+      },
+    };
   }
 
   /**
@@ -193,21 +385,6 @@ export class EventProcessor implements TEventProcessor {
     this.logger.info('EventProcessor', 'All event handlers cleared', {
       clearedEventTypes: clearedTypes,
     });
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      eventsProcessed: 0,
-      messagesSaved: 0,
-      errorsEncountered: 0,
-      lastProcessedTimestamp: null,
-      processingQueue: 0,
-    };
-
-    this.logger.info('EventProcessor', 'Statistics reset');
   }
 
   /**
@@ -234,7 +411,7 @@ export class EventProcessor implements TEventProcessor {
   }
 
   /**
-   * Handle new message events (type 4)
+   * Handle new message events (type 4) with tracking
    * Event format: [4, message_id, flags, peer_id, timestamp, text, {from_id, ...}, {attachments}]
    */
   private async handleNewMessage(event: TLongPollEvent): Promise<void> {
@@ -253,6 +430,26 @@ export class EventProcessor implements TEventProcessor {
       // Parse the event into structured message data
       const parsedMessage: TParsedMessage = this.messageParser.parseMessageEvent(event);
 
+      // Validate message data before processing
+      if (this.config.enableDataValidation) {
+        const validationResult = this.dataValidator.validateParsedMessage(parsedMessage);
+        if (!validationResult.isValid) {
+          this.logger.error('EventProcessor', 'Message validation failed, skipping', {
+            messageId: parsedMessage.messageId,
+            errors: validationResult.errors,
+            warnings: validationResult.warnings,
+          });
+          return;
+        }
+
+        if (validationResult.warnings.length > 0) {
+          this.logger.warn('EventProcessor', 'Message validation warnings', {
+            messageId: parsedMessage.messageId,
+            warnings: validationResult.warnings,
+          });
+        }
+      }
+
       // Extract chat ID from peer ID
       const chatId = parsedMessage.peerId;
 
@@ -263,6 +460,10 @@ export class EventProcessor implements TEventProcessor {
         textLength: parsedMessage.text.length,
         hasAttachments: parsedMessage.attachments.length > 0,
       });
+
+      // Track unique chats and users
+      this.stats.uniqueChatsProcessed.add(chatId);
+      this.stats.uniqueUsersEncountered.add(parsedMessage.fromId);
 
       // Save message to chat file
       await this.chatManager.saveMessage(chatId, parsedMessage);

@@ -7,12 +7,16 @@ export { ChatManager } from './ChatManager';
 export { MessageParser } from './MessageParser';
 export { ErrorHandler, ErrorType, DEFAULT_ERROR_HANDLER_CONFIG } from './ErrorHandler';
 export { Logger, DEFAULT_LOGGER_CONFIG } from './Logger';
+export { DataValidator, DEFAULT_VALIDATOR_CONFIG } from './DataValidator';
+export { FileIntegrityChecker, DEFAULT_FILE_INTEGRITY_CONFIG } from './FileIntegrityChecker';
 
 // Re-export service related types
 export type { TLoggerConfig } from './Logger';
 export type { TErrorHandlerConfig } from './ErrorHandler';
 export type { TEventProcessorConfig, EventHandler } from './EventProcessor';
 export type { TLongPollCollectorConfig, TConnectionStats } from './LongPollCollector';
+export type { TDataValidatorConfig, TValidationResult } from './DataValidator';
+export type { TFileIntegrityConfig, TIntegrityCheckResult } from './FileIntegrityChecker';
 
 // Re-export service interface contracts
 export type {

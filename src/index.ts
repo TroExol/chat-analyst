@@ -7,6 +7,8 @@ import { EventProcessor } from './services/EventProcessor';
 import { LongPollCollector } from './services/LongPollCollector';
 import { MessageParser } from './services/MessageParser';
 import { UserManager } from './services/UserManager';
+import { DataValidator } from './services/DataValidator';
+import { FileIntegrityChecker } from './services/FileIntegrityChecker';
 import { FileStorage } from './storage/FileStorage';
 import { ChatFileManager } from './storage/ChatFileManager';
 import { UserCacheManager } from './storage/UserCacheManager';
@@ -38,6 +40,10 @@ class ChatAnalyzer {
   private userManager!: UserManager;
   private eventProcessor!: EventProcessor;
   private longPollCollector!: LongPollCollector;
+
+  // Data validation and integrity
+  private dataValidator!: DataValidator;
+  private fileIntegrityChecker!: FileIntegrityChecker;
 
   // Statistics and monitoring
   private startTime: Date | null = null;
@@ -103,6 +109,23 @@ class ChatAnalyzer {
       // Processing layer
       this.messageParser = new MessageParser();
 
+      // Data validation and integrity systems
+      this.dataValidator = new DataValidator(this.logger, {
+        strictMode: false,
+        enableMessageContentValidation: true,
+        enableFileSizeValidation: true,
+      });
+
+      this.fileIntegrityChecker = new FileIntegrityChecker(
+        this.logger,
+        this.dataValidator,
+        this.fileStorage,
+        {
+          enableChecksumValidation: true,
+          enableBackupCreation: true,
+        },
+      );
+
       this.eventProcessor = new EventProcessor(
         this.logger,
         this.errorHandler,
@@ -151,6 +174,9 @@ class ChatAnalyzer {
 
       // Initialize storage
       await this.initializeStorage();
+
+      // Perform startup integrity checks
+      await this.performStartupChecks();
 
       // Start core components
       await this.startComponents();
@@ -244,6 +270,50 @@ class ChatAnalyzer {
         error: (error as Error).message,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Perform startup integrity checks and validation
+   */
+  private async performStartupChecks(): Promise<void> {
+    this.logger.info('ChatAnalyzer', 'Performing startup integrity checks...');
+
+    try {
+      // Check integrity of data directories
+      const directoriesToCheck = [
+        this.fileStorage['config'].chatsPath,
+        this.fileStorage['config'].cachePath,
+      ];
+
+      const integrityResults = await this.fileIntegrityChecker.performStartupIntegrityCheck(directoriesToCheck);
+
+      // Report integrity check results
+      const totalFiles = integrityResults.length;
+      const corruptedFiles = integrityResults.filter(r => r.isCorrupted).length;
+      const healthyFiles = totalFiles - corruptedFiles;
+
+      this.logger.info('ChatAnalyzer', 'Startup integrity check completed', {
+        totalFiles,
+        healthyFiles,
+        corruptedFiles,
+        healthPercentage: totalFiles > 0 ? ((healthyFiles / totalFiles) * 100).toFixed(1) + '%' : '100%',
+      });
+
+      // Warn if there are corrupted files
+      if (corruptedFiles > 0) {
+        this.logger.warn('ChatAnalyzer', `Found ${corruptedFiles} corrupted files during startup`, {
+          corruptedFiles: integrityResults
+            .filter(r => r.isCorrupted)
+            .map(r => ({ path: r.filePath, issues: r.issues })),
+        });
+      }
+
+    } catch (error) {
+      this.logger.error('ChatAnalyzer', 'Startup integrity checks failed', {
+        error: (error as Error).message,
+      });
+      // Don't throw - continue with degraded reliability
     }
   }
 
