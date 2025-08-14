@@ -428,7 +428,7 @@ export class EventProcessor implements TEventProcessor {
       });
 
       // Parse the event into structured message data
-      const parsedMessage: TParsedMessage = this.messageParser.parseMessageEvent(event);
+      const parsedMessage: TParsedMessage = await this.messageParser.parseMessageEvent(event);
 
       // Validate message data before processing
       if (this.config.enableDataValidation) {

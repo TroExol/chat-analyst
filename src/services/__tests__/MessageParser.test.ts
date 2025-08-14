@@ -10,7 +10,7 @@ describe('MessageParser', () => {
   });
 
   describe('parseMessageEvent', () => {
-    it('should parse new message event correctly', () => {
+    it('should parse new message event correctly', async () => {
       // Example: [4, 123456, 49, 2000000001, 1755105000, "Тестовое сообщение", {"from": "123"}]
       const event: TLongPollEvent = [
         LONG_POLL_EVENT_TYPES.NEW_MESSAGE,
@@ -23,7 +23,7 @@ describe('MessageParser', () => {
         {},
       ];
 
-      const parsed = parser.parseMessageEvent(event);
+      const parsed = await await parser.parseMessageEvent(event);
 
       expect(parsed.messageId).toBe(123456);
       expect(parsed.peerId).toBe(2000000001);
@@ -35,7 +35,7 @@ describe('MessageParser', () => {
       expect(parsed.flags.chat).toBe(true);
     });
 
-    it('should parse message with attachments', () => {
+    it('should parse message with attachments', async () => {
       const event: TLongPollEvent = [
         LONG_POLL_EVENT_TYPES.NEW_MESSAGE,
         123457,
@@ -54,7 +54,7 @@ describe('MessageParser', () => {
         },
       ];
 
-      const parsed = parser.parseMessageEvent(event);
+      const parsed = await parser.parseMessageEvent(event);
 
       expect(parsed.attachments).toHaveLength(2);
       expect(parsed.attachments[0].type).toBe('photo');
@@ -93,10 +93,10 @@ describe('MessageParser', () => {
         'Test',
       ];
 
-      expect(() => parser.parseMessageEvent(event)).toThrow('Invalid message ID');
+      expect(async () => await parser.parseMessageEvent(event)).toThrow('Invalid message ID');
     });
 
-    it('should handle outgoing messages correctly', () => {
+    it('should handle outgoing messages correctly', async () => {
       const event: TLongPollEvent = [
         LONG_POLL_EVENT_TYPES.NEW_MESSAGE,
         123456,
@@ -107,7 +107,7 @@ describe('MessageParser', () => {
         {},
       ];
 
-      const parsed = parser.parseMessageEvent(event);
+      const parsed = await parser.parseMessageEvent(event);
 
       expect(parsed.flags.outbox).toBe(true);
       expect(parsed.flags.unread).toBe(false);
@@ -247,7 +247,7 @@ describe('MessageParser', () => {
   });
 
   describe('Real VK Long Poll examples', () => {
-    it('should parse real incoming chat message', () => {
+    it('should parse real incoming chat message', async () => {
       // Based on provided example: [4, 4155970, 532481, 2000000219]
       const event: TLongPollEvent = [
         4, 4155970, 532481, 2000000219, 1755104990,
@@ -256,7 +256,7 @@ describe('MessageParser', () => {
         {},
       ];
 
-      const parsed = parser.parseMessageEvent(event);
+      const parsed = await parser.parseMessageEvent(event);
 
       expect(parsed.messageId).toBe(4155970);
       expect(parsed.peerId).toBe(2000000219);
@@ -264,7 +264,7 @@ describe('MessageParser', () => {
       expect(parsed.text).toContain('293702');
     });
 
-    it('should parse real message with photo attachment', () => {
+    it('should parse real message with photo attachment', async () => {
       // Based on provided example with photo attachment
       const event: TLongPollEvent = [
         4, 4155980, 532481, 2000000192, 1755105418,
@@ -276,7 +276,7 @@ describe('MessageParser', () => {
         },
       ];
 
-      const parsed = parser.parseMessageEvent(event);
+      const parsed = await parser.parseMessageEvent(event);
 
       expect(parsed.attachments).toHaveLength(1);
       expect(parsed.attachments[0].type).toBe('photo');

@@ -1,5 +1,6 @@
 import type { TMessageParser, TLongPollEvent, TParsedMessage, TAttachment } from '../types';
 import { parseMessageFlags } from '../utils';
+import type { VKApi } from './VKApi';
 
 /**
  * VK Long Poll event type constants
@@ -22,12 +23,19 @@ export const LONG_POLL_EVENT_TYPES = {
 } as const;
 
 export class MessageParser implements TMessageParser {
+  private vkApi?: VKApi;
+  private currentUserId?: number; // Cached current user ID
+
+  constructor(vkApi?: VKApi) {
+    this.vkApi = vkApi;
+  }
+
   /**
    * Parses VK Long Poll event array into structured message data
    * @param event - Long Poll event array [type, ...data]
    * @returns Parsed message data
    */
-  parseMessageEvent(event: TLongPollEvent): TParsedMessage {
+  async parseMessageEvent(event: TLongPollEvent): Promise<TParsedMessage> {
     if (!Array.isArray(event) || event.length < 6) {
       throw new Error(`Invalid Long Poll event format: expected array with at least 6 elements, got ${event.length}`);
     }
@@ -70,9 +78,20 @@ export class MessageParser implements TMessageParser {
     if (extraInfo.from && typeof extraInfo.from === 'string') {
       fromId = parseInt(extraInfo.from, 10);
     } else if (messageFlags.outbox) {
-      // For outgoing messages, we need to get current user ID somehow
-      // For now, use a placeholder that will be handled by UserManager
-      fromId = 0; // Will be resolved later
+      // For outgoing messages, get current user ID
+      if (this.vkApi) {
+        try {
+          if (!this.currentUserId) {
+            this.currentUserId = await this.vkApi.getCurrentUserId();
+          }
+          fromId = this.currentUserId;
+        } catch (error) {
+          console.warn('MessageParser: Failed to get current user ID for outbox message:', error);
+          fromId = 0; // Fallback
+        }
+      } else {
+        fromId = 0; // No VK API available
+      }
     } else {
       // For incoming messages in private chats, from_id = peer_id
       // For group chats, we need to extract from extra data

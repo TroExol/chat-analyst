@@ -16,6 +16,7 @@ import { getFormData } from '../../utils';
 export class VKApi {
   private readonly baseUrl: string = 'https://api.vk.com/method';
   private token: string = '';
+  private currentUserId: number | null = null; // Cache for current user ID
 
   public getLongPollServerForChat = (): Promise<MessagesGetLongPollServerResponse> => {
     const params: TApiWithAccessTokenParams<MessagesGetLongPollServerParams> = {
@@ -87,11 +88,11 @@ export class VKApi {
    * @param fields - Additional fields to include
    * @returns Promise with users data
    */
-  public getUsers = async (userIds: number[], fields?: string[]): Promise<UsersGetResponse> => {
+  public getUsers = async (userIds?: number[], fields?: string[]): Promise<UsersGetResponse> => {
     const params: TApiWithAccessTokenParams<UsersGetParams> = {
       access_token: this.token,
       v: '5.199',
-      user_ids: userIds.join(','),
+      user_ids: userIds?.join(','),
       fields: fields?.join(','),
     };
 
@@ -147,6 +148,29 @@ export class VKApi {
       'POST',
       params,
     );
+  };
+
+  /**
+   * Get current user ID from VK API
+   * @returns Promise with current user ID
+   */
+  public getCurrentUserId = async (): Promise<number> => {
+    if (this.currentUserId !== null) {
+      return this.currentUserId;
+    }
+
+    try {
+      const response = await this.getUsers(undefined, ['id']); // Get current user info
+
+      if (response && response.length > 0 && typeof response[0].id === 'number') {
+        this.currentUserId = response[0].id;
+        return this.currentUserId;
+      }
+    } catch (error) {
+      console.warn('VKApi: Failed to get current user ID:', error);
+    }
+
+    throw new Error('Unable to determine current user ID');
   };
 
   public refreshAccessToken = async () => {

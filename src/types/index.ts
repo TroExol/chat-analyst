@@ -142,7 +142,7 @@ export interface TUserManager {
 
 export interface TMessageParser {
   // eslint-disable-next-line no-unused-vars
-  parseMessageEvent(event: TLongPollEvent): TParsedMessage;
+  parseMessageEvent(event: TLongPollEvent): Promise<TParsedMessage>;
   // eslint-disable-next-line no-unused-vars
   parseAttachments(attachmentData: Record<string, any>): TAttachment[];
 }

@@ -165,7 +165,7 @@ describe('EventProcessor', () => {
       const testEvent = createTestMessageEvent();
       const testMessage = createTestParsedMessage();
 
-      mockMessageParser.parseMessageEvent.mockReturnValue(testMessage);
+      mockMessageParser.parseMessageEvent.mockResolvedValue(testMessage);
       mockChatManager.saveMessage.mockResolvedValue();
       mockChatManager.updateActiveUsers.mockResolvedValue();
 
@@ -353,7 +353,7 @@ describe('EventProcessor', () => {
       const testEvent = createTestMessageEvent();
       const testMessage = createTestParsedMessage();
 
-      mockMessageParser.parseMessageEvent.mockReturnValue(testMessage);
+      mockMessageParser.parseMessageEvent.mockResolvedValue(testMessage);
       mockChatManager.saveMessage.mockResolvedValue();
       mockChatManager.updateActiveUsers.mockResolvedValue();
 
@@ -372,7 +372,7 @@ describe('EventProcessor', () => {
       const testEvent = createTestMessageEvent();
       const testMessage = createTestParsedMessage();
 
-      mockMessageParser.parseMessageEvent.mockReturnValue(testMessage);
+      mockMessageParser.parseMessageEvent.mockResolvedValue(testMessage);
       mockChatManager.saveMessage.mockResolvedValue();
       mockChatManager.updateActiveUsers.mockResolvedValue();
 
@@ -456,7 +456,7 @@ describe('EventProcessor', () => {
       ];
 
       const testEvent = createTestMessageEvent();
-      mockMessageParser.parseMessageEvent.mockReturnValue(messageWithAttachments);
+      mockMessageParser.parseMessageEvent.mockResolvedValue(messageWithAttachments);
       mockChatManager.saveMessage.mockResolvedValue();
       mockChatManager.updateActiveUsers.mockResolvedValue();
 
@@ -485,7 +485,7 @@ describe('EventProcessor', () => {
       const privateChatEvent = createTestMessageEvent(123456, 123); // Direct peer ID
       const testMessage = createTestParsedMessage(123456, 123);
 
-      mockMessageParser.parseMessageEvent.mockReturnValue(testMessage);
+      mockMessageParser.parseMessageEvent.mockResolvedValue(testMessage);
       mockChatManager.saveMessage.mockResolvedValue();
       mockChatManager.updateActiveUsers.mockResolvedValue();
 

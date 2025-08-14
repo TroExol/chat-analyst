@@ -115,7 +115,7 @@ class ChatAnalyzer {
       );
 
       // Processing layer
-      this.messageParser = new MessageParser();
+      this.messageParser = new MessageParser(this.vkApi);
 
       // Data validation and integrity systems
       this.dataValidator = new DataValidator(this.logger, {

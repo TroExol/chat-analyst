@@ -495,7 +495,7 @@ export class FileIntegrityChecker {
         JSON.parse(repairedContent);
 
         // Create backup before repair
-        await fs.copyFile(filePath, `${filePath}.pre-repair.${Date.now()}`);
+        // await fs.copyFile(filePath, `${filePath}.pre-repair.${Date.now()}`);
 
         // Write repaired content
         await fs.writeFile(filePath, repairedContent);
