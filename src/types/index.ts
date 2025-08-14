@@ -137,6 +137,8 @@ export interface TUserManager {
   getUserInfo(userId: number): Promise<TUser>;
   // eslint-disable-next-line no-unused-vars
   batchGetUsers(userIds: number[]): Promise<Map<number, TUser>>;
+  // eslint-disable-next-line no-unused-vars
+  cacheUser(user: TUser): void;
   clearCache(): void;
 }
 

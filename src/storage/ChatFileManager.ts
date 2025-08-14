@@ -298,25 +298,44 @@ export class ChatFileManager implements TChatManager {
           try {
             const membersResponse = await this.vkApi.getConversationMembers(chatId);
 
-            if (membersResponse?.items?.length) {
-              // Extract user IDs from members response
+            if (membersResponse?.profiles?.length) {
+              // Use profile data directly from the API response (no additional requests needed!)
+              for (const profile of membersResponse.profiles) {
+                if (profile.id) {
+                  // Convert VK API user to our format
+                  const user = {
+                    id: profile.id,
+                    name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+                    lastActivity: profile.last_seen?.time ? new Date(profile.last_seen.time * 1000) : new Date(),
+                  };
+
+                  // Cache the user for future requests
+                  this.userManager.cacheUser(user);
+
+                  // Add to chat participants
+                  allChatUsers.push({
+                    ...user,
+                    lastActivity: new Date(), // Set current time for new chat creation
+                  });
+                }
+              }
+
+              console.log(`ChatFileManager: Loaded ${allChatUsers.length} participants for chat ${chatId} from API profiles`);
+            } else if (membersResponse?.items?.length) {
+              // Fallback to old method if profiles are not available
               const participantIds = membersResponse.items
                 .map(item => item.member_id)
-                .filter(id => id && id > 0) as number[]; // Filter out community IDs (negative numbers)
+                .filter(id => id && id > 0) as number[];
 
               if (participantIds.length > 0) {
                 const usersMap = await this.userManager.batchGetUsers(participantIds);
-
-                // Convert Map to array with current timestamp as lastActivity
                 for (const [, userData] of usersMap) {
-                  const userWithActivity = {
+                  allChatUsers.push({
                     ...userData,
                     lastActivity: new Date(),
-                  };
-                  allChatUsers.push(userWithActivity);
+                  });
                 }
-
-                console.log(`ChatFileManager: Loaded ${allChatUsers.length} participants for chat ${chatId}`);
+                console.log(`ChatFileManager: Loaded ${allChatUsers.length} participants for chat ${chatId} via batchGetUsers fallback`);
               }
             }
           } catch (error) {
