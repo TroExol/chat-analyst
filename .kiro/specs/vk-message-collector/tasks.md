@@ -85,8 +85,8 @@
   - Implement message buffering during temporary failures
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 7. Create event processing pipeline
-- [ ] 7.1 Implement EventProcessor core logic
+- [x] 7. Create event processing pipeline
+- [x] 7.1 Implement EventProcessor core logic
 
   - Create EventProcessor class to handle and route Long Poll events
   - Implement handleNewMessage method with message extraction
@@ -94,7 +94,7 @@
   - Create integration with UserManager and ChatManager
   - _Requirements: 1.4, 2.1, 3.1_
 
-- [ ] 7.2 Add attachment processing
+- [x] 7.2 Add attachment processing
 
   - Implement attachment extraction from Long Poll event data
   - Add support for different attachment types (photo, audio, video, sticker, link)
