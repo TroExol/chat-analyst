@@ -1,4 +1,7 @@
 import { config } from 'dotenv';
+// Load environment variables
+config();
+
 import { ConfigManager, type TAppConfig, EnvironmentConfigManager } from './config';
 import { VKApi } from './services/VKApi';
 import { Logger } from './services/Logger';
@@ -15,9 +18,6 @@ import { FileStorage } from './storage/FileStorage';
 import { ChatFileManager } from './storage/ChatFileManager';
 import { UserCacheManager } from './storage/UserCacheManager';
 
-// Load environment variables
-config();
-
 /**
  * Main application class integrating all VK Message Collector components
  * Requirements: 1.1, 1.2, 6.4
@@ -26,7 +26,7 @@ class ChatAnalyzer {
   private isRunning: boolean = false;
   private isShuttingDown: boolean = false;
   private config: TAppConfig;
-  private envConfig!: EnvironmentConfigManager;
+  private envConfig: EnvironmentConfigManager = new EnvironmentConfigManager();
 
   // Core services
   private logger: Logger;

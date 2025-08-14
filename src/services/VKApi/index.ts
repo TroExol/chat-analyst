@@ -52,7 +52,7 @@ export class VKApi {
   public connectToLongPollServer = async (connectionParams: TLongPollConnectionParams): Promise<TLongPollResponse> => {
     const { server, key, ts, wait = 25, mode = 170, version = 3 } = connectionParams;
 
-    const url = `${server}?act=a_check&key=${key}&ts=${ts}&wait=${wait}&mode=${mode}&version=${version}`;
+    const url = `https://${server}?act=a_check&key=${key}&ts=${ts}&wait=${wait}&mode=${mode}&version=${version}`;
 
     try {
       const response = await fetch(url, {

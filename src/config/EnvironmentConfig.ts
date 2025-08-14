@@ -187,6 +187,7 @@ const TESTING_CONFIG: TEnvironmentConfig = {
  */
 interface TValidationRule {
   field: string;
+  // eslint-disable-next-line no-unused-vars
   validator: (value: any) => boolean;
   message: string;
 }
