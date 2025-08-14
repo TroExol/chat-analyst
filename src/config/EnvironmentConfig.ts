@@ -102,7 +102,7 @@ const PRODUCTION_CONFIG: TEnvironmentConfig = {
   operationalMode: 'collect-only',
   featureFlags: {
     enableAdvancedLogging: false,
-    enablePerformanceMetrics: true,
+    enablePerformanceMetrics: false,
     enableDataValidation: true,
     enableFileIntegrityChecks: true,
     enableAutoRecovery: true,
@@ -125,7 +125,7 @@ const PRODUCTION_CONFIG: TEnvironmentConfig = {
     enableRateLimiting: true,
   },
   monitoring: {
-    enableHealthChecks: true,
+    enableHealthChecks: false,
     healthCheckPort: 8080,
     metricsCollectionInterval: 300000, // 5 minutes
     logLevel: 'info',
