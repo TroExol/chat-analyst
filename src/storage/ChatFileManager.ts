@@ -1,6 +1,7 @@
 import type { TChatManager, TChat, TParsedMessage, TUser, TStoredChatData, TMessage } from '../types';
 import { FileStorage } from './FileStorage';
 import { UserManager } from '../services/UserManager';
+import type { VKApi } from '../services/VKApi';
 
 /**
  * Configuration for ChatFileManager
@@ -28,6 +29,7 @@ export class ChatFileManager implements TChatManager {
   private fileStorage: FileStorage;
   private userManager: UserManager;
   private config: TChatFileManagerConfig;
+  private readonly vkApi?: VKApi; // VKApi instance for fetching chat titles
 
   // In-memory cache for performance
   private chatCache = new Map<number, TChat>();
@@ -39,10 +41,12 @@ export class ChatFileManager implements TChatManager {
     fileStorage: FileStorage,
     userManager: UserManager,
     config: Partial<TChatFileManagerConfig> = {},
+    vkApi?: VKApi, // VKApi instance for fetching chat titles
   ) {
     this.fileStorage = fileStorage;
     this.userManager = userManager;
     this.config = { ...DEFAULT_CHAT_MANAGER_CONFIG, ...config };
+    this.vkApi = vkApi;
   }
 
   /**
@@ -272,8 +276,27 @@ export class ChatFileManager implements TChatManager {
   }
 
   private async createNewChat(chatId: number, firstMessage: TParsedMessage): Promise<TChat> {
-    // For now, use a default chat name - can be enhanced later with VK API call
-    const chatName = `Chat ${chatId}`;
+    // Try to get real chat name from VK API
+    let chatName = `Chat ${chatId}`; // fallback name
+
+    if (this.vkApi) {
+      try {
+        const conversationsResponse = await this.vkApi.getConversationsById([chatId]);
+        if (conversationsResponse.items?.length) {
+          const conversation = conversationsResponse.items[0];
+          // For group chats, title is in chat_settings.title
+          if (conversation.chat_settings?.title) {
+            chatName = conversation.chat_settings.title;
+          } else if (conversation.peer?.type === 'user' && conversation.peer.id) {
+            // For private chats, we might want to use the user's name
+            const userInfo = await this.userManager.getUserInfo(conversation.peer.id);
+            chatName = `Диалог с ${userInfo.name}`;
+          }
+        }
+      } catch (error) {
+        console.warn(`ChatFileManager: Failed to fetch chat title for ${chatId}, using fallback:`, error);
+      }
+    }
 
     const author = await this.userManager.getUserInfo(firstMessage.fromId);
 

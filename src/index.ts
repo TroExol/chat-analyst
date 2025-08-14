@@ -111,6 +111,7 @@ class ChatAnalyzer {
         this.fileStorage,
         this.userManager,
         this.config.chatFileManager,
+        this.vkApi, // Pass VK API for fetching chat titles
       );
 
       // Processing layer
