@@ -1,5 +1,14 @@
-import { MessagesGetLongPollHistoryParams, MessagesGetLongPollHistoryResponse, MessagesGetLongPollServerParams, MessagesGetLongPollServerResponse } from '@vkontakte/api-schema-typescript';
-import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse } from './types';
+import {
+  MessagesGetLongPollHistoryParams,
+  MessagesGetLongPollHistoryResponse,
+  MessagesGetLongPollServerParams,
+  MessagesGetLongPollServerResponse,
+  UsersGetParams,
+  UsersGetResponse,
+  MessagesGetConversationsByIdParams,
+  MessagesGetConversationsByIdResponse,
+} from '@vkontakte/api-schema-typescript';
+import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse, TLongPollResponse, TVKApiResponse, TLongPollConnectionParams } from './types';
 import { getFormData } from '../../utils';
 
 export class VKApi {
@@ -30,6 +39,81 @@ export class VKApi {
     };
     return await this.fetchWithRetry<MessagesGetLongPollHistoryParams, MessagesGetLongPollHistoryResponse>(
       `${this.baseUrl}/messages.getLongPollHistory`,
+      'POST',
+      params,
+    );
+  };
+
+  /**
+   * Direct connection to VK Long Poll server for real-time events
+   * @param connectionParams - Long Poll connection parameters from getLongPollServerForChat
+   * @returns Promise with Long Poll response containing events
+   */
+  public connectToLongPollServer = async (connectionParams: TLongPollConnectionParams): Promise<TLongPollResponse> => {
+    const { server, key, ts, wait = 25, mode = 170, version = 3 } = connectionParams;
+
+    const url = `${server}?act=a_check&key=${key}&ts=${ts}&wait=${wait}&mode=${mode}&version=${version}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Long Poll request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as TLongPollResponse;
+
+      // Handle Long Poll specific errors
+      if (data.failed) {
+        throw new Error(`Long Poll failed with code: ${data.failed}`);
+      }
+
+      return data;
+    } catch (error) {
+      throw new Error(`Long Poll connection error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  /**
+   * Get users information by IDs
+   * @param userIds - Array of user IDs to fetch
+   * @param fields - Additional fields to include
+   * @returns Promise with users data
+   */
+  public getUsers = async (userIds: number[], fields?: string[]): Promise<UsersGetResponse> => {
+    const params: TApiWithAccessTokenParams<UsersGetParams> = {
+      access_token: this.token,
+      v: '5.199',
+      user_ids: userIds.join(','),
+      fields: fields?.join(','),
+    };
+
+    return this.fetchWithRetry<UsersGetParams, UsersGetResponse>(
+      `${this.baseUrl}/users.get`,
+      'POST',
+      params,
+    );
+  };
+
+  /**
+   * Get conversations by IDs to fetch chat titles and info
+   * @param peerIds - Array of peer IDs (chat IDs)
+   * @returns Promise with conversations data
+   */
+  public getConversationsById = async (peerIds: number[]): Promise<MessagesGetConversationsByIdResponse> => {
+    const params: TApiWithAccessTokenParams<MessagesGetConversationsByIdParams> = {
+      access_token: this.token,
+      v: '5.199',
+      peer_ids: peerIds.join(','),
+    };
+
+    return this.fetchWithRetry<MessagesGetConversationsByIdParams, MessagesGetConversationsByIdResponse>(
+      `${this.baseUrl}/messages.getConversationsById`,
       'POST',
       params,
     );
@@ -69,40 +153,112 @@ export class VKApi {
     return false;
   };
 
+  /**
+   * Set access token for API calls
+   * @param token - VK access token
+   */
+  public setAccessToken = (token: string): void => {
+    this.token = token;
+  };
+
+  /**
+   * Get current access token
+   * @returns Current VK access token
+   */
+  public getAccessToken = (): string => {
+    return this.token;
+  };
+
   private fetchWithRetry = async <P extends Record<string, any>, R>(
     url: string,
     method: 'POST' | 'GET',
     params: TApiWithAccessTokenParams<P>,
   ): Promise<R> => {
     let countTries = 0;
-    const getter = async () => {
-      if (countTries > 2) {
-        return {
-          error: {
-            error_code: 9991,
-            error_msg: 'Много попыток',
-          },
-        };
+    const maxRetries = 3;
+
+    const getter = async (): Promise<R> => {
+      if (countTries >= maxRetries) {
+        throw new Error(`VK API: Превышено максимальное количество попыток (${maxRetries})`);
       }
 
-      const data = await fetch(url, {
-        method,
-        body: getFormData({
-          ...params,
-          access_token: this.token,
-        }),
-      }).then((res) => res.json());
+      try {
+        const data = await fetch(url, {
+          method,
+          body: getFormData({
+            ...params,
+            access_token: this.token,
+          }),
+        }).then((res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
+          return res.json();
+        }) as TVKApiResponse<R>;
 
-      if (data.error) {
-        console.log('fetchWithRetry: Ошибка', data.error);
-        if (data.error.error_code === 5) {
-          await this.refreshAccessToken();
-          countTries++;
+        // Handle VK API errors
+        if (data.error) {
+          const error = data.error;
+          console.log(`VK API Error: ${error.error_code} - ${error.error_msg}`);
+
+          switch (error.error_code) {
+          case 5: {
+            // Invalid access token
+            console.log('Попытка обновления токена...');
+            const tokenRefreshed = await this.refreshAccessToken();
+            if (tokenRefreshed) {
+              countTries++;
+              return getter();
+            }
+            throw new Error('Не удалось обновить токен доступа');
+          }
+
+          case 6:
+            // Too many requests per second
+            console.log('Rate limit достигнут, ожидание...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            countTries++;
+            return getter();
+
+          case 14:
+            // Captcha needed
+            throw new Error('Требуется ввод капчи. Невозможно автоматически обработать.');
+
+          case 15:
+            // Access denied
+            throw new Error('Доступ запрещен. Проверьте права токена.');
+
+          default:
+            throw new Error(`VK API Error ${error.error_code}: ${error.error_msg}`);
+          }
+        }
+
+        if (!data.response) {
+          throw new Error('VK API: Пустой ответ от сервера');
+        }
+
+        return data.response;
+      } catch (error) {
+        if (error instanceof Error) {
+          // If it's a known VK API error, don't retry
+          if (error.message.includes('VK API Error') ||
+              error.message.includes('Требуется ввод капчи') ||
+              error.message.includes('Доступ запрещен')) {
+            throw error;
+          }
+        }
+
+        // For network errors, retry with exponential backoff
+        countTries++;
+        if (countTries < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, countTries - 1), 10000);
+          console.log(`Повторная попытка через ${delay}ms (попытка ${countTries}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
           return getter();
         }
-      }
 
-      return data.response;
+        throw error;
+      }
     };
 
     return getter();

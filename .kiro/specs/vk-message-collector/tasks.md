@@ -22,15 +22,15 @@
   - Add unit tests for flag parsing functionality
   - _Requirements: 1.4, 5.3_
 
-- [ ] 3. Create VK API integration layer
-- [ ] 3.1 Extend existing VKApi class with Long Poll methods
+- [x] 3. Create VK API integration layer
+- [x] 3.1 Extend existing VKApi class with Long Poll methods
 
   - Add getLongPollHistory method implementation (uncomment and fix)
   - Implement direct Long Poll server connection method
   - Add error handling for VK API responses
   - _Requirements: 1.1, 1.4, 4.1_
 
-- [ ] 3.2 Implement Long Poll event parsing
+- [x] 3.2 Implement Long Poll event parsing
 
   - Create MessageParser class for parsing Long Poll events
   - Implement parseMessageEvent method to decode event arrays
