@@ -1,3 +1,5 @@
+import { mkdir } from 'fs/promises';
+
 export const getFormData = (data: Record<string, any>) => {
   const formData = new FormData();
   Object.entries(data).forEach(([key, value]) => {
@@ -25,7 +27,6 @@ export function sanitizeFileName(name: string): string {
  */
 export async function ensureDirectoryExists(dirPath: string): Promise<void> {
   try {
-    const { mkdir } = await import('fs/promises');
     await mkdir(dirPath, { recursive: true });
   } catch (error) {
     if ((error as any)?.code !== 'EEXIST') {
