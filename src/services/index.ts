@@ -1,6 +1,6 @@
 // Export all service classes
 export { VKApi } from './VKApi/index';
-export { LongPollCollector } from './LongPollCollector';
+export { LongPollCollector, DEFAULT_LONGPOLL_COLLECTOR_CONFIG } from './LongPollCollector';
 export { EventProcessor, VK_EVENT_TYPES, DEFAULT_EVENT_PROCESSOR_CONFIG } from './EventProcessor';
 export { UserManager } from './UserManager';
 export { ChatManager } from './ChatManager';
@@ -12,6 +12,7 @@ export { Logger, DEFAULT_LOGGER_CONFIG } from './Logger';
 export type { TLoggerConfig } from './Logger';
 export type { TErrorHandlerConfig } from './ErrorHandler';
 export type { TEventProcessorConfig, EventHandler } from './EventProcessor';
+export type { TLongPollCollectorConfig, TConnectionStats } from './LongPollCollector';
 
 // Re-export service interface contracts
 export type {

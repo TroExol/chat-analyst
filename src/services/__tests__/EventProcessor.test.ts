@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { EventProcessor, VK_EVENT_TYPES, DEFAULT_EVENT_PROCESSOR_CONFIG, type TEventProcessorConfig } from '../EventProcessor';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { EventProcessor, VK_EVENT_TYPES, type TEventProcessorConfig } from '../EventProcessor';
 import { Logger } from '../Logger';
 import { ErrorHandler } from '../ErrorHandler';
 import { MessageParser } from '../MessageParser';
