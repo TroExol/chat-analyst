@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import type { TCachedUser, TUser } from '../types';
+import type { TCachedUser } from '../types';
 import { validateUser } from '../models';
 import { ensureDirectoryExists } from '../utils';
 
