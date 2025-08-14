@@ -38,15 +38,15 @@
   - Create unit tests for different event types (new message, read, flags)
   - _Requirements: 1.4, 5.3_
 
-- [ ] 4. Build user management system
-- [ ] 4.1 Implement UserManager with caching
+- [x] 4. Build user management system
+- [x] 4.1 Implement UserManager with caching
 
   - Create UserManager class with TTL-based cache
   - Implement getUserInfo method with batch API calls optimization
   - Add cache expiration and cleanup logic
   - _Requirements: 3.3, 3.4_
 
-- [ ] 4.2 Create user cache persistence
+- [x] 4.2 Create user cache persistence
 
   - Implement user cache save/load to JSON file
   - Add cache warming on startup from existing file
