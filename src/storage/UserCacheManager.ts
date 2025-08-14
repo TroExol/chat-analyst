@@ -117,9 +117,6 @@ export class UserCacheManager {
       const filePath = this.config.cacheFilePath;
       await ensureDirectoryExists(join(filePath, '..'));
 
-      // Create backup before saving new data
-      await this.createBackup();
-
       // Convert Map to plain object for JSON serialization
       const cacheData: Record<string, TCachedUser> = {};
 

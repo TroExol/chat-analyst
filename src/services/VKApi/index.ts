@@ -7,6 +7,8 @@ import {
   UsersGetResponse,
   MessagesGetConversationsByIdParams,
   MessagesGetConversationsByIdResponse,
+  MessagesGetConversationMembersParams,
+  MessagesGetConversationMembersResponse,
 } from '@vkontakte/api-schema-typescript';
 import { TApiWithAccessTokenParams, TRefreshAccessTokenResponse, TLongPollResponse, TVKApiResponse, TLongPollConnectionParams } from './types';
 import { getFormData } from '../../utils';
@@ -114,6 +116,34 @@ export class VKApi {
 
     return this.fetchWithRetry<MessagesGetConversationsByIdParams, MessagesGetConversationsByIdResponse>(
       `${this.baseUrl}/messages.getConversationsById`,
+      'POST',
+      params,
+    );
+  };
+
+  /**
+   * Get conversation members list
+   * @param peerId - Chat/conversation ID
+   * @param offset - Offset for pagination
+   * @param count - Number of members to return
+   * @returns Promise with conversation members data
+   */
+  public getConversationMembers = async (
+    peerId: number,
+    offset = 0,
+    count = 200,
+  ): Promise<MessagesGetConversationMembersResponse> => {
+    const params: TApiWithAccessTokenParams<MessagesGetConversationMembersParams> = {
+      access_token: this.token,
+      v: '5.199',
+      peer_id: peerId,
+      offset,
+      count,
+      extended: 1, // Return profiles and groups information
+    };
+
+    return this.fetchWithRetry<MessagesGetConversationMembersParams, MessagesGetConversationMembersResponse>(
+      `${this.baseUrl}/messages.getConversationMembers`,
       'POST',
       params,
     );

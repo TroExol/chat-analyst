@@ -132,7 +132,13 @@ src/
       "lastActivity": "2024-01-01T12:30:45.000Z"
     }
   ],
-  "activeUsers": [12345, 67890],
+  "activeUsers": [
+    {
+      "id": 12345,
+      "name": "Имя Пользователя",
+      "lastActivity": "2024-01-01T12:30:45.000Z"
+    }
+  ],
   "messages": [
     {
       "id": 987654321,
@@ -142,8 +148,7 @@ src/
       },
       "date": "2024-01-01T12:30:45.000Z",
       "content": "Текст сообщения",
-      "attachments": [],
-      "flags": 0
+      "attachments": []
     }
   ]
 }

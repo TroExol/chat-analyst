@@ -105,7 +105,6 @@ export class ChatFileManager implements TChatManager {
         date: new Date(message.timestamp * 1000).toISOString(),
         content: message.text,
         attachments: message.attachments,
-        flags: message.flags,
       };
 
       // Add message to chat (avoid duplicates)
@@ -276,15 +275,17 @@ export class ChatFileManager implements TChatManager {
   }
 
   private async createNewChat(chatId: number, firstMessage: TParsedMessage): Promise<TChat> {
-    // Try to get real chat name from VK API
+    // Try to get real chat name and participants from VK API
     let chatName = `Chat ${chatId}`; // fallback name
+    let allChatUsers: TUser[] = [];
+    let activeChatUsers: TUser[] = [];
 
     if (this.vkApi) {
       try {
         const conversationsResponse = await this.vkApi.getConversationsById([chatId]);
         if (conversationsResponse.items?.length) {
           const conversation = conversationsResponse.items[0];
-          // For group chats, title is in chat_settings.title
+          // Get chat name
           if (conversation.chat_settings?.title) {
             chatName = conversation.chat_settings.title;
           } else if (conversation.peer?.type === 'user' && conversation.peer.id) {
@@ -292,25 +293,62 @@ export class ChatFileManager implements TChatManager {
             const userInfo = await this.userManager.getUserInfo(conversation.peer.id);
             chatName = `Диалог с ${userInfo.name}`;
           }
+
+          // Get all participants using messages.getConversationMembers API method
+          try {
+            const membersResponse = await this.vkApi.getConversationMembers(chatId);
+
+            if (membersResponse?.items?.length) {
+              // Extract user IDs from members response
+              const participantIds = membersResponse.items
+                .map(item => item.member_id)
+                .filter(id => id && id > 0) as number[]; // Filter out community IDs (negative numbers)
+
+              if (participantIds.length > 0) {
+                const usersMap = await this.userManager.batchGetUsers(participantIds);
+
+                // Convert Map to array with current timestamp as lastActivity
+                for (const [, userData] of usersMap) {
+                  const userWithActivity = {
+                    ...userData,
+                    lastActivity: new Date(),
+                  };
+                  allChatUsers.push(userWithActivity);
+                }
+
+                console.log(`ChatFileManager: Loaded ${allChatUsers.length} participants for chat ${chatId}`);
+              }
+            }
+          } catch (error) {
+            console.warn(`ChatFileManager: Failed to fetch chat participants for ${chatId}:`, error);
+          }
         }
       } catch (error) {
-        console.warn(`ChatFileManager: Failed to fetch chat title for ${chatId}, using fallback:`, error);
+        console.warn(`ChatFileManager: Failed to fetch chat data for ${chatId}, using fallback:`, error);
       }
     }
 
-    const author = await this.userManager.getUserInfo(firstMessage.fromId);
+    // Fallback: if no participants loaded, add at least the message author
+    if (allChatUsers.length === 0) {
+      const author = await this.userManager.getUserInfo(firstMessage.fromId);
+      allChatUsers = [author];
+    }
+
+    // Add message author as active user (they just sent a message)
+    const messageAuthor = await this.userManager.getUserInfo(firstMessage.fromId);
+    activeChatUsers = [{ ...messageAuthor, lastActivity: new Date() }];
 
     const newChat: TChat = {
       id: chatId,
       name: chatName,
-      users: [author],
-      activeUsers: [{ ...author, lastActivity: new Date() }],
+      users: allChatUsers,
+      activeUsers: activeChatUsers,
       messages: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    console.log(`ChatFileManager: Created new chat ${chatId} - "${chatName}"`);
+    console.log(`ChatFileManager: Created new chat ${chatId} - "${chatName}" with ${allChatUsers.length} participants`);
     return newChat;
   }
 

@@ -239,7 +239,6 @@ describe('ChatFileManager', () => {
           date: '2024-01-01T10:00:00.000Z',
           content: 'Existing message',
           attachments: [],
-          flags: testFlags,
         }],
       };
 

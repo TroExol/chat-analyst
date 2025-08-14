@@ -11,7 +11,6 @@ export interface TMessage {
   date: string; // ISO string
   content: string;
   attachments?: TAttachment[];
-  flags: TMessageFlags;
 }
 
 export interface TAttachment {

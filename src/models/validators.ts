@@ -88,7 +88,6 @@ export function validateMessage(message: unknown): message is TMessage {
     validateUser(m.author) &&
     typeof m.date === 'string' &&
     typeof m.content === 'string' &&
-    validateMessageFlags(m.flags) &&
     (m.attachments === undefined ||
      (Array.isArray(m.attachments) && m.attachments.every(validateAttachment)))
   );

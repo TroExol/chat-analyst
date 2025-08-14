@@ -101,11 +101,6 @@ export class DataValidator {
             result.isValid = false;
           }
         }
-
-        // Check for potentially corrupted text
-        if (this.containsSuspiciousCharacters(message.text)) {
-          result.warnings.push('Message contains suspicious characters');
-        }
       }
 
       // Attachments validation
@@ -122,12 +117,6 @@ export class DataValidator {
           result.warnings.push(...attachmentResult.warnings);
         }
       }
-
-      // Flags validation
-      if (typeof message.flags !== 'number' || message.flags < 0) {
-        result.warnings.push('Invalid or missing message flags');
-      }
-
     } catch (error) {
       result.errors.push(`Validation error: ${(error as Error).message}`);
       result.isValid = false;
